@@ -3,7 +3,7 @@ use std::path::Path;
 use rusqlite::{params, Connection, Result};
 use walkdir::WalkDir;
 use serde::Deserialize;
-use chrono::{DateTime, Utc, NaiveDateTime, TimeZone};
+use chrono::{Utc, NaiveDateTime, TimeZone};
 use crate::models::{GoogleMessagesFile, GoogleGroupInfo};
 use crate::db::{upsert_user, upsert_group};
 
@@ -17,39 +17,36 @@ struct UserInfoUser {
     email: String,
 }
 
-// "Tuesday, October 30, 2018 at 8:05:32 PM UTC"
 fn parse_google_date(date_str: &str) -> Option<String> {
-    // 1. Clean the string
     let clean = date_str.replace(" ", " ").replace(" at ", " ");
-    
-    // 2. Strip the weekday
     let date_part = if let Some(comma_pos) = clean.find(", ") {
         &clean[comma_pos + 2..]
     } else {
         &clean
     };
-
-    // 3. Strip the timezone " UTC" from the end to use NaiveDateTime
     let date_no_tz = if date_part.ends_with(" UTC") {
         &date_part[..date_part.len() - 4]
     } else {
         date_part
     };
 
-    // Format: "October 30, 2018 8:05:32 PM"
     let fmts = ["%B %d, %Y %I:%M:%S %p", "%B %e, %Y %I:%M:%S %p"];
-    
     for fmt in fmts {
         if let Ok(naive) = NaiveDateTime::parse_from_str(date_no_tz.trim(), fmt) {
             return Some(Utc.from_utc_datetime(&naive).format("%Y-%m-%d %H:%M:%S").to_string());
         }
     }
-
-    eprintln!("Date parse error for: {}", date_str);
     None
 }
 
 pub fn process_takeout_dir(takeout_path: &Path, conn: &mut Connection) -> Result<(), Box<dyn std::error::Error>> {
+    // Store takeout path in config
+    conn.execute(
+        "INSERT INTO config (key, value) VALUES ('takeout_path', ?1)
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        params![takeout_path.to_string_lossy()],
+    )?;
+
     let mut main_user_email: Option<String> = None;
     let users_path = takeout_path.join("Users");
     if users_path.exists() {
@@ -116,6 +113,7 @@ pub fn process_takeout_dir(takeout_path: &Path, conn: &mut Connection) -> Result
         if messages_path.exists() {
             let messages_content = fs::read_to_string(&messages_path)?;
             let messages_file: GoogleMessagesFile = serde_json::from_str(&messages_content)?;
+            let mut latest_msg_date: Option<String> = None;
 
             for msg in messages_file.messages {
                 let is_main = main_user_email.as_deref() == msg.creator.email.as_deref();
@@ -123,20 +121,17 @@ pub fn process_takeout_dir(takeout_path: &Path, conn: &mut Connection) -> Result
                 
                 let iso_date = parse_google_date(&msg.created_date).unwrap_or_else(|| msg.created_date.clone());
                 
+                if latest_msg_date.is_none() || iso_date > *latest_msg_date.as_ref().unwrap() {
+                    latest_msg_date = Some(iso_date.clone());
+                }
+
                 tx.execute(
                     "INSERT INTO messages (group_id, user_id, text, created_at, topic_id, google_message_id)
                      VALUES (?1, ?2, ?3, ?4, ?5, ?6)
                      ON CONFLICT(google_message_id) DO UPDATE SET
                         text = excluded.text,
                         created_at = excluded.created_at",
-                    params![
-                        group_db_id,
-                        user_db_id,
-                        msg.text,
-                        iso_date,
-                        msg.topic_id,
-                        msg.message_id
-                    ],
+                    params![group_db_id, user_db_id, msg.text, iso_date, msg.topic_id, msg.message_id],
                 )?;
 
                 let message_db_id: i64 = tx.query_row(
@@ -147,6 +142,7 @@ pub fn process_takeout_dir(takeout_path: &Path, conn: &mut Connection) -> Result
 
                 if let Some(attachments) = msg.attached_files {
                     for att in attachments {
+                        // Metadata only - no copying here!
                         tx.execute(
                             "INSERT INTO attachments (message_id, group_id, original_name, export_name)
                              VALUES (?1, ?2, ?3, ?4)",
@@ -154,6 +150,10 @@ pub fn process_takeout_dir(takeout_path: &Path, conn: &mut Connection) -> Result
                         )?;
                     }
                 }
+            }
+
+            if let Some(last_date) = latest_msg_date {
+                tx.execute("UPDATE groups SET last_message_at = ?1 WHERE id = ?2", params![last_date, group_db_id])?;
             }
         }
     }

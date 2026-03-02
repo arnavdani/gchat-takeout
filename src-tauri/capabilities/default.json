@@ -9,12 +9,19 @@
     "core:default",
     "opener:default",
     "dialog:default",
-    "dialog:allow-open",
     "fs:default",
-    "fs:allow-appdata-read",
-    "fs:allow-appdata-write",
-    "fs:allow-appdata-read-recursive",
-    "fs:allow-appdata-write-recursive",
-    "shell:default"
+    "shell:default",
+    {
+      "identifier": "fs:allow-appdata-read-recursive",
+      "allow": [{ "path": "$APPDATA/**" }]
+    },
+    {
+      "identifier": "fs:allow-appdata-write-recursive",
+      "allow": [{ "path": "$APPDATA/**" }]
+    },
+    {
+      "identifier": "fs:allow-home-read-recursive",
+      "allow": [{ "path": "$HOME/**" }]
+    }
   ]
 }

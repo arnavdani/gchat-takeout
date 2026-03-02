@@ -4,6 +4,15 @@ use std::path::Path;
 pub fn init_db<P: AsRef<Path>>(path: P) -> Result<Connection> {
     let conn = Connection::open(path)?;
 
+    // Table for app settings (like takeout path)
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS config (
+            key TEXT PRIMARY KEY,
+            value TEXT
+        )",
+        [],
+    )?;
+
     conn.execute(
         "CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -21,8 +30,14 @@ pub fn init_db<P: AsRef<Path>>(path: P) -> Result<Connection> {
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             google_id TEXT UNIQUE NOT NULL,
             name TEXT,
-            type TEXT -- 'DM' or 'Space'
+            type TEXT,
+            last_message_at DATETIME
         )",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_groups_last_msg ON groups (last_message_at DESC)",
         [],
     )?;
 
@@ -64,6 +79,7 @@ pub fn init_db<P: AsRef<Path>>(path: P) -> Result<Connection> {
             group_id INTEGER,
             original_name TEXT,
             export_name TEXT,
+            is_copied INTEGER DEFAULT 0,
             FOREIGN KEY(message_id) REFERENCES messages(id),
             FOREIGN KEY(group_id) REFERENCES groups(id)
         )",
