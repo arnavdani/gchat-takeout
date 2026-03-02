@@ -1,5 +1,7 @@
 # GChat Takeout
 
+(everything below this line is ai generated btw i do NOT sound like this)
+
 Google Chat Takeout data is often an unorganized mess of JSON files and scattered media. **GChat Takeout** is a high-performance desktop browser that transforms these raw logs into a searchable, relational, and private experience. It solves the frustration of digging through directories by providing a familiar, modern chat interface for all your historical DMs and Spaces—completely offline.
 
 ## Usage
