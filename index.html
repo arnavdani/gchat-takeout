@@ -1,10 +1,23 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Tauri + React + Typescript</title>
+    <title>GChat Takeout</title>
+    <script>
+      // PRE-RENDER THEME INJECTION
+      // This runs synchronously before the body is painted
+      (function() {
+        try {
+          const theme = localStorage.getItem('gchat-theme') || 'dark';
+          document.documentElement.setAttribute('data-theme', theme);
+          // Set initial background to match CSS variables
+          const bg = theme === 'light' ? '#ffffff' : '#242424';
+          document.documentElement.style.backgroundColor = bg;
+        } catch (e) {}
+      })();
+    </script>
   </head>
 
   <body>
